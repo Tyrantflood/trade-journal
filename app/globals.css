@@ -24,3 +24,22 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Equity curve chart colors */
+:root {
+  --chart-line: #2a78d6;
+  --chart-grid: #e4e4e7;
+  --chart-zero: #a1a1aa;
+  --chart-axis: #71717a;
+  --chart-surface: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-line: #3987e5;
+    --chart-grid: #27272a;
+    --chart-zero: #52525b;
+    --chart-axis: #a1a1aa;
+    --chart-surface: #18181b;
+  }
+}

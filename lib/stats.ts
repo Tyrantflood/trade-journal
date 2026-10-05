@@ -25,11 +25,17 @@ export function averageRiskReward(trades: Trade[]): number | null {
   return total / trades.length;
 }
 
+type ClosedTrade = Trade & { result: Streak["result"] };
+
+function closedOldestFirst(trades: Trade[]): ClosedTrade[] {
+  return trades
+    .filter((t): t is ClosedTrade => t.result !== "open")
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 /** Consecutive wins or losses, counting back from the most recent closed trade. Open trades are skipped. */
 export function currentStreak(trades: Trade[]): Streak | null {
-  const closed = trades
-    .filter((t): t is Trade & { result: Streak["result"] } => t.result !== "open")
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const closed = closedOldestFirst(trades).reverse();
   if (closed.length === 0) return null;
 
   const result = closed[0].result;
@@ -39,4 +45,32 @@ export function currentStreak(trades: Trade[]): Streak | null {
     count++;
   }
   return { result, count };
+}
+
+export interface EquityPoint {
+  /** 0 is the starting point; 1..n are closed trades in the order they were logged. */
+  trade: number;
+  pair: string | null;
+  r: number;
+  equity: number;
+}
+
+/** R gained on a closed trade, assuming wins hit take profit (+R:R) and losses hit stop loss (-1R). */
+export function tradeR(trade: ClosedTrade): number {
+  return trade.result === "win" ? riskReward(trade) : -1;
+}
+
+/** Cumulative R after each closed trade, starting from 0. Empty when nothing has closed. */
+export function equityCurve(trades: Trade[]): EquityPoint[] {
+  const closed = closedOldestFirst(trades);
+  if (closed.length === 0) return [];
+
+  let equity = 0;
+  const points: EquityPoint[] = [{ trade: 0, pair: null, r: 0, equity: 0 }];
+  closed.forEach((trade, i) => {
+    const r = tradeR(trade);
+    equity += r;
+    points.push({ trade: i + 1, pair: trade.pair, r, equity });
+  });
+  return points;
 }
