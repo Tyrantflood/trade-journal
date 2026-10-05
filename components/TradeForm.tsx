@@ -1,54 +1,177 @@
-const inputClass =
-  "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-800";
+"use client";
+
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import {
+  validateTrade,
+  type NewTrade,
+  type TradeFormErrors,
+  type TradeFormValues,
+} from "@/lib/trades";
+
+const EMPTY_FORM: TradeFormValues = {
+  pair: "",
+  direction: "long",
+  entry: "",
+  stopLoss: "",
+  takeProfit: "",
+  lotSize: "",
+  result: "open",
+};
+
+const baseInputClass =
+  "w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus:ring-2 dark:bg-zinc-950";
+const okInputClass =
+  "border-zinc-300 focus:border-zinc-500 focus:ring-zinc-200 dark:border-zinc-700 dark:focus:ring-zinc-800";
+const errorInputClass =
+  "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500 dark:focus:ring-red-900";
 const labelClass = "mb-1 block text-sm font-medium";
 
-export default function TradeForm() {
+function Field({
+  id,
+  label,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      {children}
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-xs text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function TradeForm({ onSave }: { onSave: (trade: NewTrade) => boolean }) {
+  const [values, setValues] = useState<TradeFormValues>(EMPTY_FORM);
+  const [errors, setErrors] = useState<TradeFormErrors>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function update<K extends keyof TradeFormValues>(field: K, value: TradeFormValues[K]) {
+    setValues((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => {
+      const next = { ...prev, [field]: undefined };
+      // Stop loss and take profit rules depend on entry and direction.
+      if (field === "entry" || field === "direction") {
+        next.stopLoss = undefined;
+        next.takeProfit = undefined;
+      }
+      return next;
+    });
+  }
+
+  function controlProps(field: keyof TradeFormValues) {
+    return {
+      id: field,
+      name: field,
+      "aria-invalid": errors[field] ? true : undefined,
+      "aria-describedby": errors[field] ? `${field}-error` : undefined,
+      className: `${baseInputClass} ${errors[field] ? errorInputClass : okInputClass}`,
+    };
+  }
+
+  function numberProps(field: "entry" | "stopLoss" | "takeProfit" | "lotSize") {
+    return {
+      ...controlProps(field),
+      type: "number",
+      inputMode: "decimal" as const,
+      min: "0",
+      step: "any",
+      value: values[field],
+      onChange: (e: ChangeEvent<HTMLInputElement>) => update(field, e.target.value),
+    };
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const { errors: nextErrors, trade } = validateTrade(values);
+    setErrors(nextErrors);
+    if (!trade) {
+      setSaveError(null);
+      return;
+    }
+    if (!onSave(trade)) {
+      setSaveError("Couldn't save the trade. Your browser's storage may be full or disabled.");
+      return;
+    }
+    setSaveError(null);
+    setValues(EMPTY_FORM);
+  }
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
       <h2 className="mb-4 text-lg font-semibold">New trade</h2>
-      <form className="space-y-4">
+      <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="date" className={labelClass}>Date</label>
-            <input id="date" name="date" type="date" required className={inputClass} />
-          </div>
-          <div>
-            <label htmlFor="symbol" className={labelClass}>Symbol</label>
-            <input id="symbol" name="symbol" type="text" placeholder="AAPL" required className={`${inputClass} uppercase`} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="side" className={labelClass}>Side</label>
-            <select id="side" name="side" className={inputClass}>
+          <Field id="pair" label="Pair" error={errors.pair}>
+            <input
+              {...controlProps("pair")}
+              type="text"
+              placeholder="EUR/USD"
+              autoComplete="off"
+              value={values.pair}
+              onChange={(e) => update("pair", e.target.value)}
+              className={`${controlProps("pair").className} uppercase placeholder:normal-case`}
+            />
+          </Field>
+          <Field id="direction" label="Direction" error={errors.direction}>
+            <select
+              {...controlProps("direction")}
+              value={values.direction}
+              onChange={(e) => update("direction", e.target.value as TradeFormValues["direction"])}
+            >
               <option value="long">Long</option>
               <option value="short">Short</option>
             </select>
-          </div>
-          <div>
-            <label htmlFor="quantity" className={labelClass}>Quantity</label>
-            <input id="quantity" name="quantity" type="number" min="0" step="any" required className={inputClass} />
-          </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="entry" className={labelClass}>Entry price</label>
-            <input id="entry" name="entry" type="number" min="0" step="any" required className={inputClass} />
-          </div>
-          <div>
-            <label htmlFor="exit" className={labelClass}>Exit price</label>
-            <input id="exit" name="exit" type="number" min="0" step="any" required className={inputClass} />
-          </div>
+          <Field id="entry" label="Entry" error={errors.entry}>
+            <input {...numberProps("entry")} />
+          </Field>
+          <Field id="lotSize" label="Lot size" error={errors.lotSize}>
+            <input {...numberProps("lotSize")} />
+          </Field>
         </div>
-        <div>
-          <label htmlFor="notes" className={labelClass}>Notes</label>
-          <textarea id="notes" name="notes" rows={3} className={inputClass} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="stopLoss" label="Stop loss" error={errors.stopLoss}>
+            <input {...numberProps("stopLoss")} />
+          </Field>
+          <Field id="takeProfit" label="Take profit" error={errors.takeProfit}>
+            <input {...numberProps("takeProfit")} />
+          </Field>
         </div>
+        <Field id="result" label="Result" error={errors.result}>
+          <select
+            {...controlProps("result")}
+            value={values.result}
+            onChange={(e) => update("result", e.target.value as TradeFormValues["result"])}
+          >
+            <option value="open">Open</option>
+            <option value="win">Win</option>
+            <option value="loss">Loss</option>
+          </select>
+        </Field>
+        {saveError && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {saveError}
+          </p>
+        )}
         <button
           type="submit"
           className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
-          Add trade
+          Save trade
         </button>
       </form>
     </section>

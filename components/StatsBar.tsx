@@ -1,11 +1,18 @@
-const stats = [
-  { label: "Total trades", value: "0" },
-  { label: "Win rate", value: "—" },
-  { label: "Net P&L", value: "$0.00" },
-  { label: "Avg P&L / trade", value: "—" },
-];
+import type { Trade } from "@/lib/trades";
 
-export default function StatsBar() {
+export default function StatsBar({ trades }: { trades: Trade[] }) {
+  const wins = trades.filter((t) => t.result === "win").length;
+  const losses = trades.filter((t) => t.result === "loss").length;
+  const open = trades.filter((t) => t.result === "open").length;
+  const closed = wins + losses;
+
+  const stats = [
+    { label: "Total trades", value: String(trades.length) },
+    { label: "Win rate", value: closed > 0 ? `${Math.round((wins / closed) * 100)}%` : "—" },
+    { label: "Wins / Losses", value: `${wins} / ${losses}` },
+    { label: "Open trades", value: String(open) },
+  ];
+
   return (
     <section aria-label="Statistics" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {stats.map((stat) => (
