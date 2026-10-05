@@ -1,10 +1,19 @@
+import Header from "@/components/Header";
+import StatsBar from "@/components/StatsBar";
+import TradeForm from "@/components/TradeForm";
+import TradesTable from "@/components/TradesTable";
+
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">Trade Journal</h1>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        Log your trades and review your performance.
-      </p>
-    </main>
+    <div className="flex min-h-full flex-1 flex-col bg-zinc-50 dark:bg-black">
+      <Header />
+      <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-6 sm:px-6">
+        <StatsBar />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-start">
+          <TradeForm />
+          <TradesTable />
+        </div>
+      </main>
+    </div>
   );
 }
