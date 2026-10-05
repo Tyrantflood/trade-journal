@@ -32,8 +32,9 @@ export function getTrades(): Trade[] {
   return cachedTrades;
 }
 
-export function getServerTrades(): Trade[] {
-  return EMPTY;
+// null tells the page the browser hasn't been read yet, so it can avoid flashing the empty state.
+export function getServerTrades(): Trade[] | null {
+  return null;
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -56,16 +57,25 @@ function newId(): string {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function addTrade(trade: NewTrade): boolean {
-  const next: Trade[] = [
-    { ...trade, id: newId(), createdAt: new Date().toISOString() },
-    ...getTrades(),
-  ];
+function save(trades: Trade[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
   } catch {
     return false;
   }
   listeners.forEach((listener) => listener());
   return true;
+}
+
+export function addTrade(trade: NewTrade): boolean {
+  return save([{ ...trade, id: newId(), createdAt: new Date().toISOString() }, ...getTrades()]);
+}
+
+/** Replaces a trade's details, keeping its id and the date it was logged. */
+export function updateTrade(id: string, trade: NewTrade): boolean {
+  return save(getTrades().map((t) => (t.id === id ? { ...trade, id: t.id, createdAt: t.createdAt } : t)));
+}
+
+export function deleteTrade(id: string): boolean {
+  return save(getTrades().filter((t) => t.id !== id));
 }

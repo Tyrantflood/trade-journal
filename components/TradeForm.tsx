@@ -4,6 +4,7 @@ import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "reac
 import {
   validateTrade,
   type NewTrade,
+  type Trade,
   type TradeFormErrors,
   type TradeFormValues,
 } from "@/lib/trades";
@@ -17,6 +18,18 @@ const EMPTY_FORM: TradeFormValues = {
   lotSize: "",
   result: "open",
 };
+
+function toFormValues(trade: Trade): TradeFormValues {
+  return {
+    pair: trade.pair,
+    direction: trade.direction,
+    entry: String(trade.entry),
+    stopLoss: String(trade.stopLoss),
+    takeProfit: String(trade.takeProfit),
+    lotSize: String(trade.lotSize),
+    result: trade.result,
+  };
+}
 
 const baseInputClass =
   "w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus:ring-2 dark:bg-zinc-950";
@@ -52,8 +65,19 @@ function Field({
   );
 }
 
-export default function TradeForm({ onSave }: { onSave: (trade: NewTrade) => boolean }) {
-  const [values, setValues] = useState<TradeFormValues>(EMPTY_FORM);
+// The parent remounts this form (via key) when switching between adding and editing a trade.
+export default function TradeForm({
+  editingTrade,
+  onSave,
+  onCancel,
+}: {
+  editingTrade?: Trade;
+  onSave: (trade: NewTrade) => boolean;
+  onCancel?: () => void;
+}) {
+  const [values, setValues] = useState<TradeFormValues>(() =>
+    editingTrade ? toFormValues(editingTrade) : EMPTY_FORM,
+  );
   const [errors, setErrors] = useState<TradeFormErrors>({});
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -110,7 +134,7 @@ export default function TradeForm({ onSave }: { onSave: (trade: NewTrade) => boo
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="mb-4 text-lg font-semibold">New trade</h2>
+      <h2 className="mb-4 text-lg font-semibold">{editingTrade ? "Edit trade" : "New trade"}</h2>
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-2 gap-3">
           <Field id="pair" label="Pair" error={errors.pair}>
@@ -119,6 +143,7 @@ export default function TradeForm({ onSave }: { onSave: (trade: NewTrade) => boo
               type="text"
               placeholder="EUR/USD"
               autoComplete="off"
+              autoFocus={Boolean(editingTrade)}
               value={values.pair}
               onChange={(e) => update("pair", e.target.value)}
               className={`${controlProps("pair").className} uppercase placeholder:normal-case`}
@@ -167,12 +192,23 @@ export default function TradeForm({ onSave }: { onSave: (trade: NewTrade) => boo
             {saveError}
           </p>
         )}
-        <button
-          type="submit"
-          className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
-          Save trade
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            className="flex-1 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            {editingTrade ? "Save changes" : "Save trade"}
+          </button>
+          {editingTrade && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
     </section>
   );
