@@ -1,16 +1,25 @@
+import { averageRiskReward, currentStreak, winRate } from "@/lib/stats";
 import type { Trade } from "@/lib/trades";
 
 export default function StatsBar({ trades }: { trades: Trade[] }) {
-  const wins = trades.filter((t) => t.result === "win").length;
-  const losses = trades.filter((t) => t.result === "loss").length;
-  const open = trades.filter((t) => t.result === "open").length;
-  const closed = wins + losses;
+  const rate = winRate(trades);
+  const avgRR = averageRiskReward(trades);
+  const streak = currentStreak(trades);
 
   const stats = [
     { label: "Total trades", value: String(trades.length) },
-    { label: "Win rate", value: closed > 0 ? `${Math.round((wins / closed) * 100)}%` : "—" },
-    { label: "Wins / Losses", value: `${wins} / ${losses}` },
-    { label: "Open trades", value: String(open) },
+    { label: "Win rate", value: rate === null ? "—" : `${Math.round(rate * 100)}%` },
+    { label: "Average R:R", value: avgRR === null ? "—" : `1:${avgRR.toFixed(2)}` },
+    {
+      label: "Current streak",
+      value: streak === null ? "—" : `${streak.count} ${streak.result}${streak.count === 1 ? "" : streak.result === "win" ? "s" : "es"}`,
+      className:
+        streak === null
+          ? ""
+          : streak.result === "win"
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-red-600 dark:text-red-400",
+    },
   ];
 
   return (
@@ -21,7 +30,7 @@ export default function StatsBar({ trades }: { trades: Trade[] }) {
           className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
         >
           <p className="text-sm text-zinc-500 dark:text-zinc-400">{stat.label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{stat.value}</p>
+          <p className={`mt-1 text-2xl font-semibold tabular-nums ${stat.className ?? ""}`}>{stat.value}</p>
         </div>
       ))}
     </section>
