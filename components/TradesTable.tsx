@@ -1,4 +1,5 @@
-import type { Trade, TradeResult } from "@/lib/trades";
+import { formatTradeDate } from "@/lib/format";
+import { compareTradesOldestFirst, type Trade, type TradeResult } from "@/lib/trades";
 import { ChartIcon, PencilIcon, TrashIcon } from "./icons";
 
 const columns = ["Date", "Pair", "Direction", "Entry", "Stop loss", "Take profit", "Lot size", "Result"];
@@ -9,7 +10,6 @@ const resultStyles: Record<TradeResult, string> = {
   open: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
 };
 
-const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
 const cellClass = "whitespace-nowrap px-2.5 py-3 first:pl-5";
 // Pinned to the right so the buttons stay reachable when the table scrolls sideways.
@@ -79,8 +79,8 @@ export default function TradesTable({
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade) => {
-                const date = dateFormat.format(new Date(trade.createdAt));
+              {[...trades].sort((a, b) => compareTradesOldestFirst(b, a)).map((trade) => {
+                const date = formatTradeDate(trade.date);
                 const isEditing = trade.id === editingId;
                 const rowBg = isEditing ? "bg-zinc-100 dark:bg-zinc-800" : "bg-white dark:bg-zinc-900";
                 return (

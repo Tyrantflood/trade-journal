@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trade Journal
 
-## Getting Started
+A single-page trading journal built with Next.js (App Router), TypeScript, Tailwind CSS and Recharts.
 
-First, run the development server:
+- Log trades with date, pair, direction, entry, stop loss, take profit, lot size and result (win / loss / open)
+- Edit trades, and delete them with an 8-second Undo
+- If a trade you're editing is changed or deleted in another tab, the form warns you instead of overwriting it
+- Stats: total trades, win rate, average planned R:R and current win/loss streak
+- Equity curve of cumulative R over closed trades
+- Light and dark themes (follows your system until you pick one)
+
+## Where your data lives
+
+Trades are saved in your browser's `localStorage` under the key `trade-journal:trades`. Nothing is sent to a server, so trades don't sync between browsers or devices, and clearing your site data deletes them.
+
+## How the numbers are calculated
+
+The app records planned levels, not exit prices, so results are measured in **R**, where 1R is the amount risked (entry to stop loss):
+
+- **R:R** for a trade is `|take profit − entry| ÷ |entry − stop loss|`. Average R:R includes open trades.
+- **Win rate** is wins ÷ (wins + losses). Open trades are excluded.
+- **Equity curve**: each win adds its planned R:R (assumes take profit was hit), each loss subtracts 1R (assumes the stop was hit). Trades are plotted by trade date; trades on the same date keep the order they were logged.
+- **Current streak** counts back from the most recent closed trade by trade date, skipping open ones.
+
+The logic is in [`lib/stats.ts`](lib/stats.ts) and validation in [`lib/trades.ts`](lib/trades.ts).
+
+## Development
+
+Requires Node.js 22.18 or newer (the unit tests run TypeScript directly with Node's built-in test runner).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm test         # unit tests for validation, stats, formatting and storage
+npm run lint
+npm run build    # production build
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

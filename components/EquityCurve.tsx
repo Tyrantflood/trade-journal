@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatTradeDate } from "@/lib/format";
 import { equityCurve, type EquityPoint } from "@/lib/stats";
 import type { Trade } from "@/lib/trades";
 
@@ -30,6 +31,7 @@ function EquityTooltip({ point }: { point: EquityPoint }) {
           <p className="font-medium">
             Trade {point.trade} · {point.pair}
           </p>
+          {point.date && <p className="text-zinc-500 dark:text-zinc-400">{formatTradeDate(point.date)}</p>}
           <p className="text-zinc-500 dark:text-zinc-400">This trade: {formatR(point.r)}</p>
         </>
       )}

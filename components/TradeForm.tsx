@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import type { UpdateResult } from "@/lib/tradeStore";
 import {
+  toLocalDateString,
   validateTrade,
   type NewTrade,
   type Trade,
@@ -10,6 +12,7 @@ import {
 } from "@/lib/trades";
 
 const EMPTY_FORM: TradeFormValues = {
+  date: "", // empty means "today", filled in at render time
   pair: "",
   direction: "long",
   entry: "",
@@ -21,6 +24,7 @@ const EMPTY_FORM: TradeFormValues = {
 
 function toFormValues(trade: Trade): TradeFormValues {
   return {
+    date: trade.date,
     pair: trade.pair,
     direction: trade.direction,
     entry: String(trade.entry),
@@ -31,13 +35,23 @@ function toFormValues(trade: Trade): TradeFormValues {
   };
 }
 
+// Today's date only exists in the browser; the server renders "" so hydration matches.
+const subscribeNever = () => () => {};
+function useToday(): string {
+  return useSyncExternalStore(subscribeNever, () => toLocalDateString(new Date()), () => "");
+}
+
 const baseInputClass =
   "w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus:ring-2 dark:bg-zinc-950";
 const okInputClass =
-  "border-zinc-300 focus:border-zinc-500 focus:ring-zinc-200 dark:border-zinc-700 dark:focus:ring-zinc-800";
+  "border-zinc-300 focus:border-zinc-500 focus:ring-zinc-400 dark:border-zinc-700 dark:focus:border-zinc-400 dark:focus:ring-zinc-500";
 const errorInputClass =
-  "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500 dark:focus:ring-red-900";
+  "border-red-500 focus:border-red-500 focus:ring-red-300 dark:border-red-500 dark:focus:ring-red-700";
 const labelClass = "mb-1 block text-sm font-medium";
+const primaryButtonClass =
+  "rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300";
+const secondaryButtonClass =
+  "rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800";
 
 function Field({
   id,
@@ -65,21 +79,42 @@ function Field({
   );
 }
 
-// The parent remounts this form (via key) when switching between adding and editing a trade.
+export interface SaveTarget {
+  id: string;
+  expectedVersion: number;
+}
+
+/**
+ * Adds a new trade, or edits one when `editing` is set. The parent remounts this form (via key) when
+ * switching between trades. `editing.current` is the live stored trade, so changes from other tabs
+ * show up here; it is undefined if the trade was deleted elsewhere.
+ */
 export default function TradeForm({
-  editingTrade,
+  editing,
   onSave,
   onCancel,
 }: {
-  editingTrade?: Trade;
-  onSave: (trade: NewTrade) => boolean;
+  editing?: { current: Trade | undefined };
+  onSave: (trade: NewTrade, target: SaveTarget | null) => UpdateResult;
   onCancel?: () => void;
 }) {
+  const today = useToday();
+  // The version this edit started from; a different live version means another tab changed it.
+  const [base, setBase] = useState<Trade | undefined>(editing?.current);
   const [values, setValues] = useState<TradeFormValues>(() =>
-    editingTrade ? toFormValues(editingTrade) : EMPTY_FORM,
+    editing?.current ? toFormValues(editing.current) : EMPTY_FORM,
   );
   const [errors, setErrors] = useState<TradeFormErrors>({});
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const current = editing?.current;
+  const conflict: "changed" | "deleted" | null = !editing
+    ? null
+    : !current
+      ? "deleted"
+      : base && current.version !== base.version
+        ? "changed"
+        : null;
 
   function update<K extends keyof TradeFormValues>(field: K, value: TradeFormValues[K]) {
     setValues((prev) => ({ ...prev, [field]: value }));
@@ -104,51 +139,76 @@ export default function TradeForm({
     };
   }
 
+  // Text inputs rather than type="number": the scroll wheel and arrow keys can't silently change a price,
+  // and anything that isn't a number reaches validation instead of being blanked out by the browser.
   function numberProps(field: "entry" | "stopLoss" | "takeProfit" | "lotSize") {
     return {
       ...controlProps(field),
-      type: "number",
+      type: "text",
       inputMode: "decimal" as const,
-      min: "0",
-      step: "any",
+      autoComplete: "off",
       value: values[field],
       onChange: (e: ChangeEvent<HTMLInputElement>) => update(field, e.target.value),
     };
   }
 
+  function save(target: SaveTarget | null) {
+    const { errors: nextErrors, trade } = validateTrade({ ...values, date: values.date || today }, today);
+    setErrors(nextErrors);
+    setSaveError(null);
+    if (!trade) return;
+
+    const result = onSave(trade, target);
+    if (result === "failed") {
+      setSaveError("Couldn't save the trade. Your browser's storage may be full or disabled.");
+    } else if (result === "saved" && !editing) {
+      setValues(EMPTY_FORM);
+    }
+    // "conflict" and "missing" re-render this form from storage, which shows the matching warning.
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const { errors: nextErrors, trade } = validateTrade(values);
-    setErrors(nextErrors);
-    if (!trade) {
-      setSaveError(null);
-      return;
-    }
-    if (!onSave(trade)) {
-      setSaveError("Couldn't save the trade. Your browser's storage may be full or disabled.");
-      return;
-    }
+    if (conflict) return; // the warning above the buttons offers the choices
+    save(editing && base ? { id: base.id, expectedVersion: base.version } : null);
+  }
+
+  function loadLatest() {
+    if (!current) return;
+    setBase(current);
+    setValues(toFormValues(current));
+    setErrors({});
     setSaveError(null);
-    setValues(EMPTY_FORM);
   }
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="mb-4 text-lg font-semibold">{editingTrade ? "Edit trade" : "New trade"}</h2>
+      <h2 className="mb-4 text-lg font-semibold">{editing ? "Edit trade" : "New trade"}</h2>
       <form className="space-y-4" onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-2 gap-3">
+          <Field id="date" label="Date" error={errors.date}>
+            <input
+              {...controlProps("date")}
+              type="date"
+              max={today || undefined}
+              value={values.date || today}
+              onChange={(e) => update("date", e.target.value)}
+            />
+          </Field>
           <Field id="pair" label="Pair" error={errors.pair}>
             <input
               {...controlProps("pair")}
               type="text"
               placeholder="EUR/USD"
               autoComplete="off"
-              autoFocus={Boolean(editingTrade)}
+              autoFocus={Boolean(editing)}
               value={values.pair}
               onChange={(e) => update("pair", e.target.value)}
               className={`${controlProps("pair").className} uppercase placeholder:normal-case`}
             />
           </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <Field id="direction" label="Direction" error={errors.direction}>
             <select
               {...controlProps("direction")}
@@ -157,6 +217,17 @@ export default function TradeForm({
             >
               <option value="long">Long</option>
               <option value="short">Short</option>
+            </select>
+          </Field>
+          <Field id="result" label="Result" error={errors.result}>
+            <select
+              {...controlProps("result")}
+              value={values.result}
+              onChange={(e) => update("result", e.target.value as TradeFormValues["result"])}
+            >
+              <option value="open">Open</option>
+              <option value="win">Win</option>
+              <option value="loss">Loss</option>
             </select>
           </Field>
         </div>
@@ -176,35 +247,61 @@ export default function TradeForm({
             <input {...numberProps("takeProfit")} />
           </Field>
         </div>
-        <Field id="result" label="Result" error={errors.result}>
-          <select
-            {...controlProps("result")}
-            value={values.result}
-            onChange={(e) => update("result", e.target.value as TradeFormValues["result"])}
+
+        {conflict && (
+          <div
+            role="alert"
+            className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
           >
-            <option value="open">Open</option>
-            <option value="win">Win</option>
-            <option value="loss">Loss</option>
-          </select>
-        </Field>
+            {conflict === "changed" ? (
+              <>
+                <p>
+                  <span className="font-semibold">This trade was changed in another tab.</span> Saving now would
+                  replace those changes.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={loadLatest} className={secondaryButtonClass}>
+                    Load latest version
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => current && save({ id: current.id, expectedVersion: current.version })}
+                    className={secondaryButtonClass}
+                  >
+                    Overwrite with my changes
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>
+                  <span className="font-semibold">This trade was deleted in another tab.</span> You can keep your
+                  changes as a new trade or discard them.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => save(null)} className={secondaryButtonClass}>
+                    Save as new trade
+                  </button>
+                  <button type="button" onClick={onCancel} className={secondaryButtonClass}>
+                    Discard
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {saveError && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">
             {saveError}
           </p>
         )}
         <div className="flex gap-3">
-          <button
-            type="submit"
-            className="flex-1 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
-            {editingTrade ? "Save changes" : "Save trade"}
+          <button type="submit" disabled={conflict !== null} className={`flex-1 ${primaryButtonClass}`}>
+            {editing ? "Save changes" : "Save trade"}
           </button>
-          {editingTrade && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
+          {editing && (
+            <button type="button" onClick={onCancel} className={secondaryButtonClass}>
               Cancel
             </button>
           )}

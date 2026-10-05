@@ -3,7 +3,8 @@ export type Theme = "light" | "dark";
 export const THEME_STORAGE_KEY = "trade-journal:theme";
 
 // Runs in <head> before first paint: saved choice, otherwise the system setting.
-export const themeInitScript = `(function(){try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
+// Only the storage read is guarded, so blocked storage still falls back to the system theme.
+export const themeInitScript = `(function(){var t=null;try{t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)})}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)})()`;
 
 export function getSavedTheme(): Theme | null {
   try {

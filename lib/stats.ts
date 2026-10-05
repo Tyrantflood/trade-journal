@@ -1,4 +1,4 @@
-import type { Trade } from "./trades";
+import { compareTradesOldestFirst, type Trade } from "./trades.ts";
 
 export interface Streak {
   result: "win" | "loss";
@@ -30,7 +30,7 @@ type ClosedTrade = Trade & { result: Streak["result"] };
 function closedOldestFirst(trades: Trade[]): ClosedTrade[] {
   return trades
     .filter((t): t is ClosedTrade => t.result !== "open")
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .sort(compareTradesOldestFirst);
 }
 
 /** Consecutive wins or losses, counting back from the most recent closed trade. Open trades are skipped. */
@@ -48,9 +48,10 @@ export function currentStreak(trades: Trade[]): Streak | null {
 }
 
 export interface EquityPoint {
-  /** 0 is the starting point; 1..n are closed trades in the order they were logged. */
+  /** 0 is the starting point; 1..n are closed trades in date order. */
   trade: number;
   pair: string | null;
+  date: string | null;
   r: number;
   equity: number;
 }
@@ -66,11 +67,11 @@ export function equityCurve(trades: Trade[]): EquityPoint[] {
   if (closed.length === 0) return [];
 
   let equity = 0;
-  const points: EquityPoint[] = [{ trade: 0, pair: null, r: 0, equity: 0 }];
+  const points: EquityPoint[] = [{ trade: 0, pair: null, date: null, r: 0, equity: 0 }];
   closed.forEach((trade, i) => {
     const r = tradeR(trade);
     equity += r;
-    points.push({ trade: i + 1, pair: trade.pair, r, equity });
+    points.push({ trade: i + 1, pair: trade.pair, date: trade.date, r, equity });
   });
   return points;
 }

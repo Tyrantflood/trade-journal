@@ -1,14 +1,17 @@
+import { formatPercent } from "@/lib/format";
 import { averageRiskReward, currentStreak, winRate } from "@/lib/stats";
 import type { Trade } from "@/lib/trades";
 
-export default function StatsBar({ trades }: { trades: Trade[] }) {
-  const rate = winRate(trades);
-  const avgRR = averageRiskReward(trades);
-  const streak = currentStreak(trades);
+/** trades is null while saved trades are still being read; every stat shows "—" until then. */
+export default function StatsBar({ trades }: { trades: Trade[] | null }) {
+  const list = trades ?? [];
+  const rate = winRate(list);
+  const avgRR = averageRiskReward(list);
+  const streak = currentStreak(list);
 
   const stats = [
-    { label: "Total trades", value: String(trades.length) },
-    { label: "Win rate", value: rate === null ? "—" : `${Math.round(rate * 100)}%` },
+    { label: "Total trades", value: trades === null ? "—" : String(trades.length) },
+    { label: "Win rate", value: rate === null ? "—" : formatPercent(rate) },
     { label: "Average R:R", value: avgRR === null ? "—" : `1:${avgRR.toFixed(2)}` },
     {
       label: "Current streak",

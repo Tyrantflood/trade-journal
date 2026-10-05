@@ -1,4 +1,4 @@
-import { isTrade, type NewTrade, type Trade } from "./trades";
+import { isTrade, upgradeStoredTrade, type NewTrade, type Trade } from "./trades.ts";
 
 const STORAGE_KEY = "trade-journal:trades";
 const EMPTY: Trade[] = [];
@@ -7,17 +7,30 @@ const listeners = new Set<() => void>();
 let cachedRaw: string | null = null;
 let cachedTrades: Trade[] = EMPTY;
 
+// Skips records that fail validation and repeated ids, so edit/delete only ever touch one trade.
+// Skipped records are not written back until the next save.
 function parse(raw: string | null): Trade[] {
   if (!raw) return EMPTY;
+  let data: unknown;
   try {
-    const data: unknown = JSON.parse(raw);
-    return Array.isArray(data) ? data.filter(isTrade) : EMPTY;
+    data = JSON.parse(raw);
   } catch {
     return EMPTY;
   }
+  if (!Array.isArray(data)) return EMPTY;
+  const seen = new Set<string>();
+  const trades: Trade[] = [];
+  for (const item of data) {
+    const trade = upgradeStoredTrade(item);
+    if (!isTrade(trade) || seen.has(trade.id)) continue;
+    seen.add(trade.id);
+    trades.push(trade);
+  }
+  return trades;
 }
 
 // Returns the same array instance until storage changes, as useSyncExternalStore requires.
+// Reads localStorage every time, so writes always start from what other tabs saved.
 export function getTrades(): Trade[] {
   let raw: string | null;
   try {
@@ -35,6 +48,10 @@ export function getTrades(): Trade[] {
 // null tells the page the browser hasn't been read yet, so it can avoid flashing the empty state.
 export function getServerTrades(): Trade[] | null {
   return null;
+}
+
+function notify() {
+  listeners.forEach((listener) => listener());
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -63,19 +80,39 @@ function save(trades: Trade[]): boolean {
   } catch {
     return false;
   }
-  listeners.forEach((listener) => listener());
+  notify();
   return true;
 }
 
 export function addTrade(trade: NewTrade): boolean {
-  return save([{ ...trade, id: newId(), createdAt: new Date().toISOString() }, ...getTrades()]);
+  return save([{ ...trade, id: newId(), createdAt: new Date().toISOString(), version: 1 }, ...getTrades()]);
 }
 
-/** Replaces a trade's details, keeping its id and the date it was logged. */
-export function updateTrade(id: string, trade: NewTrade): boolean {
-  return save(getTrades().map((t) => (t.id === id ? { ...trade, id: t.id, createdAt: t.createdAt } : t)));
+export type UpdateResult = "saved" | "conflict" | "missing" | "failed";
+
+/**
+ * Replaces a trade's details if it is still at `expectedVersion`, keeping its id and log time.
+ * Returns "conflict" if it was edited elsewhere since, or "missing" if it was deleted.
+ */
+export function updateTrade(id: string, trade: NewTrade, expectedVersion: number): UpdateResult {
+  const trades = getTrades();
+  const current = trades.find((t) => t.id === id);
+  if (!current || current.version !== expectedVersion) {
+    // The page may not have heard about the other tab's change yet; re-render it from storage.
+    notify();
+    return current ? "conflict" : "missing";
+  }
+  const updated: Trade = { ...trade, id, createdAt: current.createdAt, version: current.version + 1 };
+  return save(trades.map((t) => (t.id === id ? updated : t))) ? "saved" : "failed";
 }
 
 export function deleteTrade(id: string): boolean {
   return save(getTrades().filter((t) => t.id !== id));
+}
+
+/** Puts a deleted trade back exactly as it was (used by Undo). A no-op if it already exists. */
+export function restoreTrade(trade: Trade): boolean {
+  const trades = getTrades();
+  if (trades.some((t) => t.id === trade.id)) return true;
+  return save([trade, ...trades]);
 }
